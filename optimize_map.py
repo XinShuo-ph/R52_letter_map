@@ -148,15 +148,20 @@ for epoch in pbar:
     loss_history.append(loss.item())
     if len(loss_history) > args.history_length_threshold:
         loss_history.pop(0)
-        if loss.item() < last_best_loss:
-            last_best_loss = loss.item()
-        
-        if loss.item() < last_best_loss-0.01:
+        if loss.item() < last_best_loss-0.001:
             steps_without_improvement = 0
         else:
             steps_without_improvement += 1
-            
-        if steps_without_improvement >= args.steps_without_improvement_threshold :
+
+
+        if loss.item() < last_best_loss:
+            last_best_loss = loss.item()
+        
+        # If we haven't improved in a while, consider this a local minimum
+        # i.e. if the loss hasn't decreased by more than 0.001 in the last 1000 epochs
+        # and the max/min in the past args.steps_without_improvement_threshold steps are within 0.01
+        if steps_without_improvement >= args.steps_without_improvement_threshold and \
+            max(loss_history[-args.steps_without_improvement_threshold:]) - min(loss_history[-args.steps_without_improvement_threshold:]) < 0.01:
             min_dir = f"./known_minima/min_{min_idx}"
             os.makedirs(min_dir, exist_ok=True)
             torch.save(letter_map.data.cpu(), f"{min_dir}/letter_map.pt")
