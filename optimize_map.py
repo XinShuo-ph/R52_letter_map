@@ -10,12 +10,16 @@ import glob
 
 # hyperparameters
 penalty_power = 1
-steps_without_improvement_threshold = 1000
 
 # Parse command line arguments
 parser = argparse.ArgumentParser()
+parser.add_argument('--history_length_threshold', type=int, default=1000, help='Number of epochs to track loss history')
+parser.add_argument('--steps_without_improvement_threshold', type=int, default=1000, help='Number of epochs without improvement to consider local minimum')
+parser.add_argument('--n_epochs', type=int, default=5000000, help='Number of epochs to train for')
 parser.add_argument('--checkpoint', type=str, default='checkpoints', help='Directory containing checkpoints')
 args = parser.parse_args()
+
+n_epochs = args.n_epochs
 
 # Initialize wandb
 wandb.init(project="R52_search", name="letter_map_optimization", settings=wandb.Settings(mode="online"))
@@ -71,8 +75,7 @@ if os.path.exists(args.checkpoint):
         print(f"Resuming from epoch {start_epoch}")
 
 # Training loop
-n_epochs = 5000000
-pbar = tqdm.tqdm(range(start_epoch, n_epochs))
+pbar = tqdm.tqdm(range(start_epoch, start_epoch+n_epochs))
 
 # Create identity matrix on GPU
 identity = torch.eye(100, device='cuda')
@@ -143,15 +146,17 @@ for epoch in pbar:
     
     # Track progress for detecting local minima
     loss_history.append(loss.item())
-    if len(loss_history) > steps_without_improvement_threshold:
+    if len(loss_history) > args.history_length_threshold:
         loss_history.pop(0)
         if loss.item() < last_best_loss:
             last_best_loss = loss.item()
+        
+        if loss.item() < last_best_loss-0.01:
             steps_without_improvement = 0
         else:
             steps_without_improvement += 1
             
-        if steps_without_improvement >= steps_without_improvement_threshold and max(loss_history) - min(loss_history) < 0.01:
+        if steps_without_improvement >= args.steps_without_improvement_threshold :
             min_dir = f"./known_minima/min_{min_idx}"
             os.makedirs(min_dir, exist_ok=True)
             torch.save(letter_map.data.cpu(), f"{min_dir}/letter_map.pt")
@@ -175,7 +180,8 @@ for epoch in pbar:
         "minima_penalty": minima_penalty.item(),
         "epoch": epoch,
         "num_solutions": len(known_solutions),
-        "num_minima": len(known_minima)
+        "num_minima": len(known_minima),
+        "steps_without_improvement": steps_without_improvement
     })
     
     # Compute and log detailed statistics every 10 epochs
