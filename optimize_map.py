@@ -146,35 +146,34 @@ for epoch in pbar:
     
     # Track progress for detecting local minima
     loss_history.append(loss.item())
+    if loss.item() < last_best_loss-0.001:
+        steps_without_improvement = 0
+    else:
+        steps_without_improvement += 1
+    if loss.item() < last_best_loss:
+        last_best_loss = loss.item()
+
     if len(loss_history) > args.history_length_threshold:
         loss_history.pop(0)
-        if loss.item() < last_best_loss-0.001:
-            steps_without_improvement = 0
-        else:
-            steps_without_improvement += 1
-
-
-        if loss.item() < last_best_loss:
-            last_best_loss = loss.item()
         
-        # If we haven't improved in a while, consider this a local minimum
-        # i.e. if the loss hasn't decreased by more than 0.001 in the last 1000 epochs
-        # and the max/min in the past args.steps_without_improvement_threshold steps are within 0.01
-        if steps_without_improvement >= args.steps_without_improvement_threshold and \
-            max(loss_history[-args.steps_without_improvement_threshold:]) - min(loss_history[-args.steps_without_improvement_threshold:]) < 0.01:
-            min_dir = f"./known_minima/min_{min_idx}"
-            os.makedirs(min_dir, exist_ok=True)
-            torch.save(letter_map.data.cpu(), f"{min_dir}/letter_map.pt")
-            np.savetxt(f"{min_dir}/letter_map.txt", letter_map.data.cpu().numpy())
-            known_minima.append(letter_map.data.clone())
-            min_idx += 1
-            
-            # Reinitialize letter_map and optimizer when minimum found
-            letter_map.data = 1e-2*torch.randn(100, 100, device='cuda')
-            optimizer = torch.optim.Adam([letter_map], lr=0.001)
-            loss_history = []
-            last_best_loss = float('inf')
-            steps_without_improvement = 0
+    # If we haven't improved in a while, consider this a local minimum
+    # i.e. if the loss hasn't decreased by more than 0.001 in the last 1000 epochs
+    # and the max/min in the past args.steps_without_improvement_threshold steps are within 0.1
+    if steps_without_improvement >= args.steps_without_improvement_threshold and \
+        max(loss_history[-args.steps_without_improvement_threshold:]) - min(loss_history[-args.steps_without_improvement_threshold:]) < 0.1:
+        min_dir = f"./known_minima/min_{min_idx}"
+        os.makedirs(min_dir, exist_ok=True)
+        torch.save(letter_map.data.cpu(), f"{min_dir}/letter_map.pt")
+        np.savetxt(f"{min_dir}/letter_map.txt", letter_map.data.cpu().numpy())
+        known_minima.append(letter_map.data.clone())
+        min_idx += 1
+        
+        # Reinitialize letter_map and optimizer when minimum found
+        letter_map.data = 1e-2*torch.randn(100, 100, device='cuda')
+        optimizer = torch.optim.Adam([letter_map], lr=0.001)
+        loss_history = []
+        last_best_loss = float('inf')
+        steps_without_improvement = 0
     
     # Log basic metrics every epoch
     wandb.log({
